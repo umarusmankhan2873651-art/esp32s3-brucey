@@ -30,8 +30,9 @@ jobs:
       - name: List PlatformIO environments
         run: |
           cd "$PROJ"
-          pio run -l
-
+          echo "=== environments in platformio.ini ==="
+          grep -nE '^\[env:' platformio.ini || echo "(no [env:] sections found)"
+          
       - name: Build
         run: |
           cd "$PROJ"
