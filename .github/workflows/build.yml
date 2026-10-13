@@ -1,0 +1,50 @@
+name: Build Brucey S3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO and esptool
+        run: pip install -U platformio esptool
+
+      - name: Extract current firmware
+        run: |
+          mkdir -p src
+          unzip -o firmware/ESP-HACKBRUCEYS3v24.3.zip -d src
+          find src -name platformio.ini
+
+      - name: Build
+        run: |
+          PROJ=$(dirname "$(find src -name platformio.ini | head -n1)")
+          echo "PROJ=$PROJ" >> $GITHUB_ENV
+          cd "$PROJ"
+          pio run -e BRUCEY_S3_SSD1306
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          B="$PROJ/.pio/build/BRUCEY_S3_SSD1306"
+          ls -la "$B"
+          cp "$B"/*.bin out/ 2>/dev/null || true
+          cp "$B"/firmware.elf "$B"/firmware.map out/ 2>/dev/null || true
+          esptool.py --chip esp32s3 merge_bin -o out/brucey-s3-merged.bin \
+            --flash_mode dio --flash_freq 80m --flash_size 16MB \
+            0x0 "$B"/bootloader.bin 0x8000 "$B"/partitions.bin \
+            0xe000 "$B"/boot_app0.bin 0x10000 "$B"/firmware.bin || true
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brucey-s3-firmware
+          path: out/
