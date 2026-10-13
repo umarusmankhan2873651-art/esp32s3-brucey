@@ -68,33 +68,15 @@ jobs:
       - name: Configure for N16R8 hardware
         run: |
           cd "$PROJ"
-          if grep -q '^\[env:BRUCEY_S3_SSD1306\]' platformio.ini; then
-            sed -i 's|^\[env:BRUCEY_S3_SSD1306\]|&\nboard_build.flash_size = 16MB\nboard_upload.flash_size = 16MB\nboard_build.arduino.memory_type = qio_opi|' platformio.ini
-            echo "patched"
-          else
-            echo "!! env section not found, skipping patch"
-          fi
-
-      - name: Build
-        run: |
-          cd "$PROJ"
-          pio run -e BRUCEY_S3_SSD1306
-
-      - name: Collect build files
-        if: always()
-        run: |
-          mkdir -p out
-          B="${PROJ:-src}/.pio/build/BRUCEY_S3_SSD1306"
-          ls -la "$B" || true
-          cp "$B"/*.bin out/ 2>/dev/null || true
-          cp "$B"/firmware.elf "$B"/firmware.map out/ 2>/dev/null || true
-          if command -v esptool.py >/dev/null; then E="esptool.py"; else E="esptool"; fi
-          $E --chip esp32s3 merge_bin -o out/brucey-s3-merged.bin --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 "$B"/bootloader.bin 0x8000 "$B"/partitions.bin 0xe000 "$B"/boot_app0.bin 0x10000 "$B"/firmware.bin || true
-          ls -la out
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: brucey-s3-firmware
-          path: out/
-          if-no-files-found: warn
+          for pair in "board_build.flash_size=16MB" "board_upload.flash_size=16MB" "board_build.arduino.memory_type=qio_opi"; do
+            key="${pair%%=*}"
+            val="${pair#*=}"
+            if grep -qE "^[[:space:]]*${key}[[:space:]]*=" platformio.ini; then
+              echo "SKIP (already present): $key"
+            else
+              sed -i "s|^\[env:BRUCEY_S3_SSD1306\]|&\n${key} = ${val}|" platformio.ini
+              echo "ADDED: $key = $val"
+            fi
+          done
+          echo "=== FINAL platformio.ini ==="
+          cat platformio.ini
